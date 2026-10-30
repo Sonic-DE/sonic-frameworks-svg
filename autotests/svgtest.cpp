@@ -32,6 +32,7 @@ private Q_SLOTS:
     void testElements();
     void testColors();
     void testStylesheetOverrideColorChange();
+    void testThemeColorsFollowAccentColor();
     void theSameImageIsHandedBackForTheSameRequest();
 
 private:
@@ -224,6 +225,33 @@ void SvgTest::testStylesheetOverrideColorChange()
     m_svg->pixmap();
     // The background in stylesheetoverride is now red
     QVERIFY(m_svg->d->stylesheetOverride.contains(QStringLiteral(".ColorScheme-Background{color:#ff0000;}")));
+}
+
+void SvgTest::testThemeColorsFollowAccentColor()
+{
+    // A theme with its own colours and FollowAccentColor draws its highlight in the accent the
+    // Colors settings wrote to kdeglobals, and in its own colour again without an accent.
+    auto config = KSharedConfig::openConfig(QStringLiteral("kdeglobals"));
+    config->group(QStringLiteral("General")).writeEntry("AccentColor", QStringLiteral("61,212,37"));
+    config->group(QStringLiteral("Colors:Selection")).writeEntry("BackgroundNormal", QStringLiteral("50,157,35"));
+    config->sync();
+
+    auto set = new KSvg::ImageSet(QStringLiteral("testthemeaccent"), QStringLiteral("plasma/desktoptheme"), this);
+    KSvg::Svg svg;
+    svg.setImageSet(set);
+    svg.setImagePath(QStringLiteral("accent"));
+    QVERIFY(svg.isValid());
+    QCOMPARE(svg.color(KSvg::Svg::Highlight), QColor(50, 157, 35));
+    QCOMPARE(svg.pixmap().toImage().pixelColor(5, 5), QColor(50, 157, 35));
+
+    QSignalSpy spy(set, &KSvg::ImageSet::imageSetChanged);
+    config->group(QStringLiteral("General")).deleteEntry("AccentColor");
+    config->group(QStringLiteral("Colors:Selection")).deleteEntry("BackgroundNormal");
+    config->sync();
+    qApp->setPalette(QPalette(Qt::gray)); // what a colour scheme change sends
+    QVERIFY(spy.wait());
+    QCOMPARE(svg.color(KSvg::Svg::Highlight), QColor(1, 2, 3));
+    QCOMPARE(svg.pixmap().toImage().pixelColor(5, 5), QColor(1, 2, 3));
 }
 
 QTEST_MAIN(SvgTest)

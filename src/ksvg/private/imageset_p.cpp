@@ -36,6 +36,41 @@ ImageSetPrivate *ImageSetPrivate::globalImageSet = nullptr;
 QHash<QString, ImageSetPrivate *> ImageSetPrivate::themes = QHash<QString, ImageSetPrivate *>();
 using QSP = QStandardPaths;
 
+// A theme whose colors file has [General] FollowAccentColor=true keeps its colours but takes
+// the accent the user chose: the values the Colors settings wrote to kdeglobals for it.
+static void applyAccentColor(const KSharedConfigPtr& colors)
+{
+    if (!colors || !colors->group(QStringLiteral("General")).readEntry("FollowAccentColor", false)) {
+        return;
+    }
+    const KSharedConfigPtr globals = KSharedConfig::openConfig(QStringLiteral("kdeglobals"));
+    globals->reparseConfiguration();
+    if (!globals->group(QStringLiteral("General")).hasKey("AccentColor")) {
+        return;
+    }
+    const auto copy = [&](const QString& group, const QStringList& keys) {
+        const KConfigGroup source = globals->group(group);
+        KConfigGroup target = colors->group(group);
+        for (const QString& key : keys) {
+            if (source.hasKey(key)) {
+                target.writeEntry(key, source.readEntry(key, QString()));
+            }
+        }
+    };
+    const QStringList accentKeys{QStringLiteral("ForegroundActive"),
+        QStringLiteral("ForegroundLink"),
+        QStringLiteral("DecorationFocus"),
+        QStringLiteral("DecorationHover")};
+    for (const char* set : {"Window", "Button", "View", "Selection", "Tooltip", "Complementary", "Header"}) {
+        copy(QStringLiteral("Colors:") + QLatin1String(set), accentKeys);
+    }
+    copy(QStringLiteral("Colors:Selection"),
+        {QStringLiteral("BackgroundNormal"), QStringLiteral("BackgroundAlternate"), QStringLiteral("ForegroundNormal"), QStringLiteral("ForegroundInactive")});
+    copy(QStringLiteral("Colors:Button"), {QStringLiteral("BackgroundAlternate")});
+    // In memory only: the theme's file is never written.
+    colors->markAsClean();
+}
+
 QString configFileForImageSet(const QString &basePath, const QString &theme)
 {
     const QString baseName = basePath % theme;
@@ -311,6 +346,10 @@ void ImageSetPrivate::colorsChanged()
     // and discard the svg pixmap cache
     if (!colors) {
         KSharedConfig::openConfig()->reparseConfiguration();
+    } else {
+        // The accent may have changed or gone: start again from the theme's own colours.
+        colors->reparseConfiguration();
+        applyAccentColor(colors);
     }
     colorScheme = KColorScheme(QPalette::Active, KColorScheme::Window, colors);
     buttonColorScheme = KColorScheme(QPalette::Active, KColorScheme::Button, colors);
@@ -706,6 +745,7 @@ void ImageSetPrivate::setImageSetName(const QString &tempImageSetName, bool emit
         colors = nullptr;
     } else {
         colors = KSharedConfig::openConfig(colorsFile);
+        applyAccentColor(colors);
     }
 
     colorScheme = KColorScheme(QPalette::Active, KColorScheme::Window, colors);
