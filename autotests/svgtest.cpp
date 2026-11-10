@@ -13,7 +13,9 @@
 
 // Cursed way to access SvgPrivate
 #define private public
+#include "../src/ksvg/private/imageset_p.h"
 #include "../src/ksvg/private/svg_p.h"
+#include "imageset.h"
 #include "svg.h"
 
 using namespace Qt::Literals;
@@ -33,6 +35,9 @@ private Q_SLOTS:
     void testColors();
     void testStylesheetOverrideColorChange();
     void testThemeColorsFollowAccentColor();
+    void testDesktopThemeOpacity_data();
+    void testDesktopThemeOpacity();
+    void testDesktopThemeOpacityLive();
     void theSameImageIsHandedBackForTheSameRequest();
 
 private:
@@ -252,6 +257,92 @@ void SvgTest::testThemeColorsFollowAccentColor()
     QVERIFY(spy.wait());
     QCOMPARE(svg.color(KSvg::Svg::Highlight), QColor(1, 2, 3));
     QCOMPARE(svg.pixmap().toImage().pixelColor(5, 5), QColor(1, 2, 3));
+}
+
+namespace {
+// Writes [DesktopThemeOpacity] (an invalid value removes the key) and tells the image set the way
+// KConfigWatcher does; there is no session bus here. Waits until a changed setting is applied.
+void notifyOpacity(KSvg::ImageSet* set, bool enabled, const QVariant& popups)
+{
+    auto config = KSharedConfig::openConfig(QStringLiteral("kdeglobals"));
+    KConfigGroup group = config->group(QStringLiteral("DesktopThemeOpacity"));
+    group.writeEntry("Enabled", enabled);
+    if (popups.isValid()) {
+        group.writeEntry("Popups", popups.toInt());
+    } else {
+        group.deleteEntry("Popups");
+    }
+    config->sync();
+
+    QSignalSpy spy(set, &KSvg::ImageSet::imageSetChanged);
+    // One watcher is shared by every image set: earlier sets may still have a change pending too.
+    Q_EMIT set->d->globalsWatcher->configChanged(group, {QByteArrayLiteral("Enabled"), QByteArrayLiteral("Popups")});
+    if (set->d->updateNotificationTimer->isActive()) {
+        QVERIFY(spy.wait());
+    }
+}
+
+int popupAlpha(KSvg::Svg& svg)
+{
+    return qAlpha(svg.pixmap().toImage().pixel(5, 5));
+}
+}
+
+void SvgTest::testDesktopThemeOpacity_data()
+{
+    QTest::addColumn<QString>("theme");
+    QTest::addColumn<bool>("enabled");
+    QTest::addColumn<QVariant>("popups");
+    QTest::addColumn<int>("alpha");
+
+    const QString follows = QStringLiteral("testthemeopacity");
+    const QString own = QStringLiteral("testthemeopacityoff");
+    QTest::newRow("switched off: the file's own opacity") << follows << false << QVariant(50) << 217;
+    QTest::newRow("switched on without a value: the default") << follows << true << QVariant() << 217;
+    QTest::newRow("switched on") << follows << true << QVariant(50) << 128;
+    QTest::newRow("above 100 is opaque") << follows << true << QVariant(150) << 255;
+    QTest::newRow("below 0 is clear") << follows << true << QVariant(-10) << 0;
+    QTest::newRow("a theme that doesn't follow it") << own << true << QVariant(50) << 217;
+}
+
+void SvgTest::testDesktopThemeOpacity()
+{
+    QFETCH(QString, theme);
+    QFETCH(bool, enabled);
+    QFETCH(QVariant, popups);
+    QFETCH(int, alpha);
+
+    auto set = new KSvg::ImageSet(theme, QStringLiteral("plasma/desktoptheme"), this);
+    notifyOpacity(set, enabled, popups);
+    QVERIFY(!QTest::currentTestFailed());
+
+    KSvg::Svg svg;
+    svg.setImageSet(set);
+    svg.setImagePath(QStringLiteral("popup"));
+    QVERIFY(svg.isValid());
+    QVERIFY2(qAbs(popupAlpha(svg) - alpha) <= 1, qPrintable(QString::number(popupAlpha(svg))));
+}
+
+void SvgTest::testDesktopThemeOpacityLive()
+{
+    // A change to the setting reaches images already drawn, without restarting.
+    auto set = new KSvg::ImageSet(QStringLiteral("testthemeopacity"), QStringLiteral("plasma/desktoptheme"), this);
+    notifyOpacity(set, true, 50);
+    QVERIFY(!QTest::currentTestFailed());
+    KSvg::Svg svg;
+    svg.setImageSet(set);
+    svg.setImagePath(QStringLiteral("popup"));
+    QVERIFY2(qAbs(popupAlpha(svg) - 128) <= 1, qPrintable(QString::number(popupAlpha(svg))));
+
+    notifyOpacity(set, true, 90);
+    QVERIFY(!QTest::currentTestFailed());
+    QVERIFY2(qAbs(popupAlpha(svg) - 230) <= 1, qPrintable(QString::number(popupAlpha(svg))));
+
+    notifyOpacity(set, false, QVariant());
+    QVERIFY2(qAbs(popupAlpha(svg) - 217) <= 1, qPrintable(QString::number(popupAlpha(svg))));
+    auto config = KSharedConfig::openConfig(QStringLiteral("kdeglobals"));
+    config->deleteGroup(QStringLiteral("DesktopThemeOpacity"));
+    config->sync();
 }
 
 QTEST_MAIN(SvgTest)

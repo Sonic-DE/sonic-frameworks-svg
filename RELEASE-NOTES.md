@@ -2,6 +2,10 @@
 
 Sonic Frameworks SVG draws SonicDE's crisp, recolorable theme graphics at any size.
 
+## Unreleased
+
+- Behind the scenes: desktop styles can follow desktop-wide transparency settings, with automatic tests.
+
 ## 6.31.0.1 (2026-11-10)
 
 - Desktop themes follow your accent colour again.

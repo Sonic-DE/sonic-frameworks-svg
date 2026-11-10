@@ -1,0 +1,18 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "kde-artists@kde.org",
+                "Name": "KDE Visual Design Group"
+            }
+        ],
+        "Category": "",
+        "EnabledByDefault": true,
+        "Id": "testthemeopacityoff",
+        "License": "LGPL",
+        "Name": "Plasma test theme keeping its own transparency",
+        "Version": "5.20",
+        "Website": "https://plasma.kde.org"
+    },
+    "X-Plasma-API": "5.0"
+}

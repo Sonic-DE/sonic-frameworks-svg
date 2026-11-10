@@ -874,6 +874,7 @@ SvgPrivate::CacheId FrameSvgPrivate::cacheId(FrameData *frame, const QString &pr
         parts.push_back(::qHash(c.blue()));
         parts.push_back(::qHash(c.alpha()));
     }
+    parts.push_back(q->Svg::d->theme ? q->Svg::d->theme->d->opacityRulesHash : 0);
     const size_t colorsHash = qHashRange(parts.begin(), parts.end(), SvgRectsCache::s_seed);
 
     const QSize size = frameSize(frame).toSize();

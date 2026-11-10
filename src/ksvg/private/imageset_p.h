@@ -20,6 +20,7 @@
 #include <QTimer>
 
 #include <KConfigGroup>
+#include <KConfigWatcher>
 
 namespace KSvg
 {
@@ -106,10 +107,14 @@ public:
 
     void colorsChanged();
 
+    // The desktop-wide [DesktopThemeOpacity] rules, for a theme whose colors file opts in.
+    void readDesktopThemeOpacity();
+
 public Q_SLOTS:
     void scheduledCacheUpdate();
     void onAppExitCleanup();
     void notifyOfChanged();
+    void globalsChanged(const KConfigGroup& group, const QByteArrayList& names);
 
 Q_SIGNALS:
     void imageSetChanged(const QString &imageSetName);
@@ -147,6 +152,9 @@ public:
     QHash<qint64, QString> cachedSvgStyleSheets;
     QHash<qint64, QString> cachedSelectedSvgStyleSheets;
     QHash<qint64, QString> cachedInactiveSvgStyleSheets;
+    QString opacityRules;
+    size_t opacityRulesHash = 0;
+    KConfigWatcher::Ptr globalsWatcher;
     QHash<QString, QString> discoveries;
     QTimer *pixmapSaveTimer;
     QTimer *updateNotificationTimer;

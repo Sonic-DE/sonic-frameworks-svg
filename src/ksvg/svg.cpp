@@ -446,6 +446,7 @@ QString SvgPrivate::cachePath(const QString &id, const QSize &size) const
         parts.push_back(::qHash(c.blue()));
         parts.push_back(::qHash(c.alpha()));
     }
+    parts.push_back(theme ? theme->d->opacityRulesHash : 0);
     const size_t colorsHash = qHashRange(parts.begin(), parts.end(), SvgRectsCache::s_seed);
 
     auto cacheId = CacheId{double(size.width()), double(size.height()), path, id, status, devicePixelRatio, colorSet, colorsHash, 0, lastModified};

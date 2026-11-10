@@ -20,6 +20,8 @@
 
 #include <KColorUtils>
 #include <KSharedConfig>
+
+#include <algorithm>
 #include <kpluginmetadata.h>
 
 #if defined(Q_OS_LINUX)
@@ -69,6 +71,38 @@ static void applyAccentColor(const KSharedConfigPtr& colors)
     copy(QStringLiteral("Colors:Button"), {QStringLiteral("BackgroundAlternate")});
     // In memory only: the theme's file is never written.
     colors->markAsClean();
+}
+
+// A theme whose colors file has FollowDesktopThemeOpacity=true takes Desktop Style's transparency.
+// Defaults as in sonic-workspace's desktopthemeopacitysettings.kcfg.
+void ImageSetPrivate::readDesktopThemeOpacity()
+{
+    opacityRules.clear();
+    opacityRulesHash = 0;
+    if (!colors || !colors->group(QStringLiteral("General")).readEntry("FollowDesktopThemeOpacity", false)) {
+        return;
+    }
+    const KSharedConfigPtr globals = KSharedConfig::openConfig(QStringLiteral("kdeglobals"));
+    globals->reparseConfiguration();
+    const KConfigGroup group = globals->group(QStringLiteral("DesktopThemeOpacity"));
+    if (!group.readEntry("Enabled", false)) {
+        return;
+    }
+    struct Surface {
+        const char* key;
+        QLatin1String cssClass;
+        int defaultOpacity;
+    };
+    static const Surface surfaces[] = {{"Panels", QLatin1String("SonicOpacity-Panel"), 70},
+        {"Popups", QLatin1String("SonicOpacity-Popup"), 85},
+        {"Tooltips", QLatin1String("SonicOpacity-Tooltip"), 85},
+        {"Widgets", QLatin1String("SonicOpacity-Widget"), 80}};
+    for (const Surface& surface : surfaces) {
+        const int opacity = std::clamp(group.readEntry(surface.key, surface.defaultOpacity), 0, 100);
+        opacityRules += QStringLiteral(".%1{opacity:%2;}").arg(surface.cssClass, QString::number(opacity / 100.0, 'f', 2));
+    }
+    opacityRulesHash = qHash(opacityRules);
+    qCDebug(LOG_KSVG) << "desktop theme opacity rules" << imageSetName << opacityRules;
 }
 
 QString configFileForImageSet(const QString &basePath, const QString &theme)
@@ -159,6 +193,9 @@ ImageSetPrivate::ImageSetPrivate(const QString &_basePath, QObject *parent)
     QObject::connect(updateNotificationTimer, &QTimer::timeout, this, &ImageSetPrivate::notifyOfChanged);
 
     QCoreApplication::instance()->installEventFilter(this);
+
+    globalsWatcher = KConfigWatcher::create(KSharedConfig::openConfig(QStringLiteral("kdeglobals")));
+    connect(globalsWatcher.data(), &KConfigWatcher::configChanged, this, &ImageSetPrivate::globalsChanged);
 
 #if defined(Q_OS_LINUX)
     struct sysinfo x;
@@ -350,6 +387,7 @@ void ImageSetPrivate::colorsChanged()
         // The accent may have changed or gone: start again from the theme's own colours.
         colors->reparseConfiguration();
         applyAccentColor(colors);
+        readDesktopThemeOpacity();
     }
     colorScheme = KColorScheme(QPalette::Active, KColorScheme::Window, colors);
     buttonColorScheme = KColorScheme(QPalette::Active, KColorScheme::Button, colors);
@@ -359,6 +397,20 @@ void ImageSetPrivate::colorsChanged()
     headerColorScheme = KColorScheme(QPalette::Active, KColorScheme::Header, colors);
     tooltipColorScheme = KColorScheme(QPalette::Active, KColorScheme::Tooltip, colors);
     scheduleImageSetChangeNotification(PixmapCache | SvgElementsCache);
+}
+
+void ImageSetPrivate::globalsChanged(const KConfigGroup& group, const QByteArrayList& names)
+{
+    Q_UNUSED(names)
+    if (group.name() != QLatin1String("DesktopThemeOpacity")) {
+        return;
+    }
+    const QString before = opacityRules;
+    readDesktopThemeOpacity();
+    if (opacityRules != before) {
+        qCDebug(LOG_KSVG) << "desktop theme opacity changed" << imageSetName;
+        scheduleImageSetChangeNotification(PixmapCache | SvgElementsCache);
+    }
 }
 
 void ImageSetPrivate::scheduleImageSetChangeNotification(CacheTypes caches)
@@ -630,6 +682,7 @@ const QString ImageSetPrivate::svgStyleSheet(KSvg::Svg *svg)
         for (const auto colorName : std::as_const(namedColors)) {
             stylesheet += skel.arg(QString::fromUtf8(metaEnum.valueToKey(colorName)), svg->color(colorName).name());
         }
+        stylesheet += opacityRules;
 
         if (status == Svg::Status::Selected) {
             cachedSelectedSvgStyleSheets.insert(colorSet, stylesheet);
@@ -747,6 +800,7 @@ void ImageSetPrivate::setImageSetName(const QString &tempImageSetName, bool emit
         colors = KSharedConfig::openConfig(colorsFile);
         applyAccentColor(colors);
     }
+    readDesktopThemeOpacity();
 
     colorScheme = KColorScheme(QPalette::Active, KColorScheme::Window, colors);
     selectionColorScheme = KColorScheme(QPalette::Active, KColorScheme::Selection, colors);
