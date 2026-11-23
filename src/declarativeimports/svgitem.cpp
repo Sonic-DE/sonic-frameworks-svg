@@ -55,7 +55,7 @@ void SvgItem::componentComplete()
     }
 
     auto checkApplyTheme = [this]() {
-        if (!m_svg->imageSet()->filePath(QStringLiteral("colors")).isEmpty()) {
+        if (m_svg->imageSet()->hasColors()) {
             m_svg->clearColorOverrides();
         }
     };
@@ -63,7 +63,7 @@ void SvgItem::componentComplete()
         if (!m_svg) {
             return;
         }
-        if (!m_svg->imageSet()->filePath(QStringLiteral("colors")).isEmpty()) {
+        if (m_svg->imageSet()->hasColors()) {
             m_svg->clearColorOverrides();
             return;
         }

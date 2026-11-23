@@ -689,13 +689,13 @@ void FrameSvgItem::componentComplete()
     }
 
     auto checkApplyTheme = [this]() {
-        if (!m_frameSvg->imageSet()->filePath(QStringLiteral("colors")).isEmpty()) {
+        if (m_frameSvg->imageSet()->hasColors()) {
             m_frameSvg->clearCache();
             m_frameSvg->clearColorOverrides();
         }
     };
     auto applyTheme = [this]() {
-        if (!m_frameSvg->imageSet()->filePath(QStringLiteral("colors")).isEmpty()) {
+        if (m_frameSvg->imageSet()->hasColors()) {
             m_frameSvg->clearCache();
             m_frameSvg->clearColorOverrides();
 

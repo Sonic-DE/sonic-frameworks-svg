@@ -156,6 +156,8 @@ public:
     size_t opacityRulesHash = 0;
     KConfigWatcher::Ptr globalsWatcher;
     QHash<QString, QString> discoveries;
+    bool hasColorsKnown = false;
+    bool hasColors = false;
     QTimer *pixmapSaveTimer;
     QTimer *updateNotificationTimer;
     unsigned cacheSize;
